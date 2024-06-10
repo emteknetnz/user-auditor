@@ -69,7 +69,7 @@ foreach ($ghrepos as $ghrepo) {
             // check if the user has a higher permission than the team
             // if so, then count them as not in the team
             if (user_permission_is_higher($maxUserPermission, $team['max_permission'])) {
-                break;
+                continue;
             }
             $inTeam = true;
             break;
