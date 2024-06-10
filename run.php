@@ -1,40 +1,146 @@
 <?php
 
-function github_api($url, $data = [], $httpMethod = '') {
-    // silverstripe-themes has a kind of weird redirect only for api requests
-    $url = str_replace('/silverstripe-themes/silverstripe-simple', '/silverstripe/silverstripe-simple', $url);
-    $method = $httpMethod ? strtoupper($httpMethod) : 'GET';
-    print("Making $method curl request to $url\n");
-    $token = getenv('TOKEN');
-    $jsonStr = empty($data) ? '' : json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, !empty($data));
-    if ($httpMethod) {
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $httpMethod);
-    }
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'User-Agent: PHP script',
-        'Accept: application/vnd.github+json',
-        "Authorization: Bearer $token",
-        'X-GitHub-Api-Version: 2022-11-28'
-    ]);
-    if ($jsonStr) {
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonStr);
-    }
-    $response = curl_exec($ch);
-    $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    if ($httpcode >= 300) {
-        print("HTTP code $httpcode returned from GitHub API\n");
-        print("$response\n");
-        print("Failure calling github api: $url\n");
-        exit;
-    }
-    return json_decode($response, true);
+include 'functions.php';
+
+if (!getenv('TOKEN') || !isset($argv[1])) {
+    echo "Usage: TOKEN=abc php run.php <organisation>\n";
+    die;
 }
 
-if (!getenv('TOKEN')) {
-    print("Set the TOKEN environment variable\n");
-    exit;
+$organisation = $argv[1];
+$admins = [];
+$teams = [];
+$repos = [];
+
+# Fetch data
+
+$ghrepos = [];
+for ($i = 1; $i <= 10; $i++) {
+    $reposData = github_api("https://api.github.com/orgs/$organisation/repos?per_page=100&page=$i");
+    foreach ($reposData as $repoData) {
+        $ghrepos[] = $repoData['full_name'];
+    }
+    if (count($reposData) < 100) {
+        break;
+    }
 }
+
+foreach ($ghrepos as $ghrepo) {
+    $repo = [
+        'name' => $ghrepo,
+        'teams' => [],
+        'extra_users' => [],
+    ];
+    // Get repo teams
+    foreach (github_api("https://api.github.com/repos/$ghrepo/teams") as $teamData) {
+        $name = $teamData['name'];
+        // Update $teams if it hasn't been set
+        if (!isset($teams[$name])) {
+            $membersUrl = str_replace('{/member}', '', $teamData['members_url']);
+            $members = [];
+            foreach (github_api($membersUrl) as $memberData) {
+                $members[] = $memberData['login'];
+            };
+            $teams[$name] = [
+                'id' => $teamData['id'],
+                'name' => $name,
+                'members' => $members,
+                'max_permission' => max_permission($teamData['permissions']),
+            ];
+        }
+        $repo['teams'][] = $name;
+    }
+    sort($repo['teams']);
+    // Get repo users
+    foreach (github_api("https://api.github.com/repos/$ghrepo/collaborators") as $userData) {
+        $user = $userData['login'];
+        // check if the user is an admin (organisation Owner)
+        // organisation owners are on every repo in the org
+        // there doesn't appear to be an API endpoint for https://github.com/orgs/<organisation>/people
+        $maxUserPermission = max_permission($userData['permissions']);
+        if ($maxUserPermission == 'admin') {
+            $admins[$user] = true;
+            continue;
+        }
+        // check if user is already in a team
+        $inTeam = false;
+        foreach ($teams as $team) {
+            if (!in_array($user, $team['members'])) {
+                continue;
+            }
+            // check if the user has a higher permission than the team
+            // if so, then count them as not in the team
+            if (user_permission_is_higher($maxUserPermission, $team['max_permission'])) {
+                break;
+            }
+            $inTeam = true;
+            break;
+        }
+        if (!$inTeam) {
+            $repo['extra_users'][] = $user;
+        }
+        $repos[$ghrepo] = $repo;
+    }
+}
+
+# Create reports
+
+// Admins report
+$lines = ['# Admins', ''];
+ksort($admins);
+foreach ($admins as $admin => $true) {
+    $lines[] = "- $admin";
+}
+$lines[] = '';
+file_put_contents('report-admins.txt', implode("\n", $lines));
+
+// Teams report
+$lines = ['# Teams', ''];
+usort($teams, fn($a, $b) => $a['name'] <=> $b['name']);
+foreach ($teams as $team) {
+    $teamName = $team['name'];
+    $permissionNice = permission_nice($team['max_permission']);
+    $lines[] = "$teamName ($permissionNice)";
+    sort($team['members']);
+    foreach ($team['members'] as $member) {
+        $lines[] = "- $member";
+    }
+    $lines[] = '';
+}
+file_put_contents('report-teams.txt', implode("\n", $lines));
+
+// Team-repos report
+$teamRepos = [];
+$lines = ['# Team-repos', ''];
+foreach ($repos as $ghrepo => $repo) {
+    $combinedTeams = implode(', ', $repo['teams']);
+    $teamRepos[$combinedTeams] ??= [];
+    $teamRepos[$combinedTeams][] = $ghrepo;
+}
+ksort($teamRepos);
+foreach ($teamRepos as $combinedTeams => $ghrepos) {
+    $lines[] = "# $combinedTeams";
+    foreach ($ghrepos as $ghrepo) {
+        $lines[] = "- $ghrepo";
+    }
+    $lines[] = '';
+}
+file_put_contents('report-repo-teams.txt', implode("\n", $lines));
+
+// Extra users report
+$extraUserRepos = [];
+foreach ($repos as $ghrepo => $repo) {
+    foreach ($repo['extra_users'] as $user) {
+        $extraUserRepos[$user] ??= [];
+        $extraUserRepos[$user][] = $ghrepo;
+    }
+}
+$lines = ['# Extra users', ''];
+foreach ($extraUserRepos as $user => $ghrepos) {
+    $lines[] = $user;
+    foreach ($ghrepos as $ghrepo) {
+        $lines[] = "- $ghrepo";
+    }
+    $lines[] = '';
+}
+file_put_contents('report-extra-users.txt', implode("\n", $lines));
