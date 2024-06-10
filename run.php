@@ -1,11 +1,7 @@
 <?php
 
+include 'env.php';
 include 'functions.php';
-
-if (!getenv('TOKEN') || !isset($argv[1])) {
-    echo "Usage: TOKEN=abc php run.php <organisation>\n";
-    die;
-}
 
 $organisation = $argv[1];
 $admins = [];
@@ -28,35 +24,37 @@ for ($i = 1; $i <= 10; $i++) {
 foreach ($ghrepos as $ghrepo) {
     $repo = [
         'name' => $ghrepo,
-        'teams' => [],
+        'team_names' => [],
         'extra_users' => [],
     ];
     // Get repo teams
     foreach (github_api("https://api.github.com/repos/$ghrepo/teams") as $teamData) {
-        $name = $teamData['name'];
+        $teamName = $teamData['name'];
         // Update $teams if it hasn't been set
-        if (!isset($teams[$name])) {
+        if (!isset($teams[$teamName])) {
             $membersUrl = str_replace('{/member}', '', $teamData['members_url']);
             $members = [];
             foreach (github_api($membersUrl) as $memberData) {
                 $members[] = $memberData['login'];
             };
-            $teams[$name] = [
+            $teams[$teamName] = [
                 'id' => $teamData['id'],
-                'name' => $name,
+                'name' => $teamName,
                 'members' => $members,
                 'max_permission' => max_permission($teamData['permissions']),
             ];
         }
-        $repo['teams'][] = $name;
+        $repo['team_names'][] = $teamName;
     }
-    sort($repo['teams']);
+    sort($repo['team_names']);
     // Get repo users
     foreach (github_api("https://api.github.com/repos/$ghrepo/collaborators") as $userData) {
         $user = $userData['login'];
         // check if the user is an admin (organisation Owner)
         // organisation owners are on every repo in the org
         // there doesn't appear to be an API endpoint for https://github.com/orgs/<organisation>/people
+        // if someone is in this report when they shouldn't be, likely that the team permissions are
+        // too high on a particular repo - see report-repo-teams.txt
         $maxUserPermission = max_permission($userData['permissions']);
         if ($maxUserPermission == 'admin') {
             $admins[$user] = true;
@@ -96,8 +94,10 @@ file_put_contents('report-admins.txt', implode("\n", $lines));
 
 // Teams report
 $lines = ['# Teams', ''];
-usort($teams, fn($a, $b) => $a['name'] <=> $b['name']);
-foreach ($teams as $team) {
+// create a sorted copy of $teams, will loose assoc array key during sort
+$teamsForReport = $teams;
+usort($teamsForReport, fn($a, $b) => $a['name'] <=> $b['name']);
+foreach ($teamsForReport as $team) {
     $teamName = $team['name'];
     $permissionNice = permission_nice($team['max_permission']);
     $lines[] = "$teamName ($permissionNice)";
@@ -113,7 +113,10 @@ file_put_contents('report-teams.txt', implode("\n", $lines));
 $teamRepos = [];
 $lines = ['# Team-repos', ''];
 foreach ($repos as $ghrepo => $repo) {
-    $combinedTeams = implode(', ', $repo['teams']);
+    $combinedTeams = implode(', ', array_map(function($teamName) use ($teams) {
+        $team = $teams[$teamName];
+        return sprintf('%s (%s)', $team['name'], permission_nice($team['max_permission']));
+    }, $repo['team_names']));
     $teamRepos[$combinedTeams] ??= [];
     $teamRepos[$combinedTeams][] = $ghrepo;
 }
