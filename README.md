@@ -1,6 +1,6 @@
 # user-auditor
 
-Create reports of groups and user on github
+Create reports of groups and users on github
 
 ## Token
 
