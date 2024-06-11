@@ -29,6 +29,17 @@ function github_api($url, $returnOnFailure = []) {
     return json_decode($response, true);
 }
 
+function write_report($filename, $lines) {
+    file_put_contents($filename, implode("\n", $lines));
+    echo "Wrote $filename\n";
+}
+
+function most_common($values) {
+    $counts = array_count_values($values);
+    arsort($counts);
+    return key($counts);
+}
+
 function nice_permissions() {
     return [
         'admin' => 'Admin',

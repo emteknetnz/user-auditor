@@ -24,7 +24,7 @@ for ($i = 1; $i <= 10; $i++) {
 foreach ($ghrepos as $ghrepo) {
     $repo = [
         'name' => $ghrepo,
-        'team_names' => [],
+        'team_names_max_permissions' => [],
         'extra_users' => [],
     ];
     // Get repo teams
@@ -41,12 +41,18 @@ foreach ($ghrepos as $ghrepo) {
                 'id' => $teamData['id'],
                 'name' => $teamName,
                 'members' => $members,
-                'max_permission' => max_permission($teamData['permissions']),
+                'max_permissions' => [],
             ];
         }
-        $repo['team_names'][] = $teamName;
+        // team permission can be different between repos, so collect all of them and then
+        // report on the most common one later
+        $teams[$teamName]['max_permissions'][] = max_permission($teamData['permissions']);
+        $repo['team_names_max_permissions'][] = [
+            'team_name' => $teamName,
+            'max_permission' => max_permission($teamData['permissions']),
+        ];
     }
-    sort($repo['team_names']);
+    usort($repo['team_names_max_permissions'], fn($a, $b) => $a['team_name'] <=> $b['team_name']);
     // Get repo users
     foreach (github_api("https://api.github.com/repos/$ghrepo/collaborators") as $userData) {
         $user = $userData['login'];
@@ -62,13 +68,16 @@ foreach ($ghrepos as $ghrepo) {
         }
         // check if user is already in a team
         $inTeam = false;
-        foreach ($teams as $team) {
+        foreach ($repo['team_names_max_permissions'] as $teamNameMaxPermssion) {
+            $teamName = $teamNameMaxPermssion['team_name'];
+            $teamMaxPermssion = $teamNameMaxPermssion['max_permission'];
+            $team = $teams[$teamName];
             if (!in_array($user, $team['members'])) {
                 continue;
             }
             // check if the user has a higher permission than the team
             // if so, then count them as not in the team
-            if (user_permission_is_higher($maxUserPermission, $team['max_permission'])) {
+            if (user_permission_is_higher($maxUserPermission, $teamMaxPermssion)) {
                 continue;
             }
             $inTeam = true;
@@ -90,7 +99,7 @@ foreach ($admins as $admin => $true) {
     $lines[] = "- $admin";
 }
 $lines[] = '';
-file_put_contents('report-admins.txt', implode("\n", $lines));
+write_report('report-admins.txt', $lines);
 
 // Teams report
 $lines = ['# Teams', ''];
@@ -99,7 +108,7 @@ $teamsForReport = $teams;
 usort($teamsForReport, fn($a, $b) => $a['name'] <=> $b['name']);
 foreach ($teamsForReport as $team) {
     $teamName = $team['name'];
-    $permissionNice = permission_nice($team['max_permission']);
+    $permissionNice = permission_nice(most_common($team['max_permissions']));
     $lines[] = "$teamName ($permissionNice)";
     sort($team['members']);
     foreach ($team['members'] as $member) {
@@ -107,16 +116,17 @@ foreach ($teamsForReport as $team) {
     }
     $lines[] = '';
 }
-file_put_contents('report-teams.txt', implode("\n", $lines));
+write_report('report-teams.txt', $lines);
 
 // Team-repos report
 $teamRepos = [];
 $lines = ['# Team-repos', ''];
 foreach ($repos as $ghrepo => $repo) {
-    $combinedTeams = implode(', ', array_map(function($teamName) use ($teams) {
-        $team = $teams[$teamName];
-        return sprintf('%s (%s)', $team['name'], permission_nice($team['max_permission']));
-    }, $repo['team_names']));
+    $combinedTeams = implode(', ', array_map(function($teamMaxPermission) {
+        $teamName = $teamMaxPermission['team_name'];
+        $maxPermission = $teamMaxPermission['max_permission'];
+        return sprintf('%s (%s)', $teamName, permission_nice($maxPermission));
+    }, $repo['team_names_max_permissions']));
     $teamRepos[$combinedTeams] ??= [];
     $teamRepos[$combinedTeams][] = $ghrepo;
 }
@@ -128,7 +138,7 @@ foreach ($teamRepos as $combinedTeams => $ghrepos) {
     }
     $lines[] = '';
 }
-file_put_contents('report-repo-teams.txt', implode("\n", $lines));
+write_report('report-repo-teams.txt', $lines);
 
 // Extra users report
 $extraUserRepos = [];
@@ -146,4 +156,4 @@ foreach ($extraUserRepos as $user => $ghrepos) {
     }
     $lines[] = '';
 }
-file_put_contents('report-extra-users.txt', implode("\n", $lines));
+write_report('report-extra-users.txt', $lines);
