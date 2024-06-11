@@ -8,6 +8,8 @@ Create a classic token on github and tick the "repo" checkboxes which will autom
 
 https://github.com/settings/tokens/new
 
+Remember to revoke the token when you are done using it
+
 ## Usage
 
-TOKEN=abc run.php <organisation>
+`TOKEN=abc run.php [organisation]`
