@@ -24,11 +24,12 @@ for ($i = 1; $i <= 10; $i++) {
 foreach ($ghrepos as $ghrepo) {
     $repo = [
         'name' => $ghrepo,
-        'team_names_max_permissions' => [],
+        'team_names_permissions' => [],
         'extra_users' => [],
     ];
     // Get repo teams
     foreach (github_api("https://api.github.com/repos/$ghrepo/teams") as $teamData) {
+        file_put_contents("team-{$teamData['name']}.json", json_encode($teamData, 448));
         $teamName = $teamData['name'];
         // Update $teams if it hasn't been set
         if (!isset($teams[$teamName])) {
@@ -41,18 +42,19 @@ foreach ($ghrepos as $ghrepo) {
                 'id' => $teamData['id'],
                 'name' => $teamName,
                 'members' => $members,
-                'max_permissions' => [],
+                'permissions' => [],
             ];
         }
         // team permission can be different between repos, so collect all of them and then
         // report on the most common one later
+        $teams[$teamName]['permissions'][] = $teamData['permission'];
         $teams[$teamName]['max_permissions'][] = max_permission($teamData['permissions']);
-        $repo['team_names_max_permissions'][] = [
+        $repo['team_names_permissions'][] = [
             'team_name' => $teamName,
-            'max_permission' => max_permission($teamData['permissions']),
+            'permission' => $teamData['permission'],
         ];
     }
-    usort($repo['team_names_max_permissions'], fn($a, $b) => $a['team_name'] <=> $b['team_name']);
+    usort($repo['team_names_permissions'], fn($a, $b) => $a['team_name'] <=> $b['team_name']);
     // Get repo users
     foreach (github_api("https://api.github.com/repos/$ghrepo/collaborators") as $userData) {
         $user = $userData['login'];
@@ -68,16 +70,16 @@ foreach ($ghrepos as $ghrepo) {
         }
         // check if user is already in a team
         $inTeam = false;
-        foreach ($repo['team_names_max_permissions'] as $teamNameMaxPermssion) {
+        foreach ($repo['team_names_permissions'] as $teamNameMaxPermssion) {
             $teamName = $teamNameMaxPermssion['team_name'];
-            $teamMaxPermssion = $teamNameMaxPermssion['max_permission'];
+            $teamPermission = $teamNameMaxPermssion['permission'];
             $team = $teams[$teamName];
             if (!in_array($user, $team['members'])) {
                 continue;
             }
             // check if the user has a higher permission than the team
             // if so, then count them as not in the team
-            if (user_permission_is_higher($maxUserPermission, $teamMaxPermssion)) {
+            if (user_permission_is_higher($maxUserPermission, $teamPermission)) {
                 continue;
             }
             $inTeam = true;
@@ -108,7 +110,7 @@ $teamsForReport = $teams;
 usort($teamsForReport, fn($a, $b) => $a['name'] <=> $b['name']);
 foreach ($teamsForReport as $team) {
     $teamName = $team['name'];
-    $permissionNice = permission_nice(most_common($team['max_permissions']));
+    $permissionNice = permission_nice(most_common($team['permissions']));
     $lines[] = "$teamName ($permissionNice)";
     sort($team['members']);
     foreach ($team['members'] as $member) {
@@ -124,9 +126,8 @@ $lines = ['# Team-repos', ''];
 foreach ($repos as $ghrepo => $repo) {
     $combinedTeams = implode(', ', array_map(function($teamMaxPermission) {
         $teamName = $teamMaxPermission['team_name'];
-        $maxPermission = $teamMaxPermission['max_permission'];
-        return sprintf('%s (%s)', $teamName, permission_nice($maxPermission));
-    }, $repo['team_names_max_permissions']));
+        return sprintf('%s (%s)', $teamName, permission_nice($teamMaxPermission['permission']));
+    }, $repo['team_names_permissions']));
     $teamRepos[$combinedTeams] ??= [];
     $teamRepos[$combinedTeams][] = $ghrepo;
 }
