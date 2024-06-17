@@ -4,6 +4,7 @@ include 'env.php';
 include 'functions.php';
 
 $organisation = $argv[1];
+$notOrgAdmins = preg_split('#,#', $argv[2] ?? '');
 $admins = [];
 $teams = [];
 $repos = [];
@@ -64,7 +65,7 @@ foreach ($ghrepos as $ghrepo) {
         // if someone is in this report when they shouldn't be, likely that the team permissions are
         // too high on a particular repo - see report-repo-teams.txt
         $maxUserPermission = max_permission($userData['permissions']);
-        if ($maxUserPermission == 'admin') {
+        if ($maxUserPermission == 'admin' && !in_array($user, $notOrgAdmins)) {
             $admins[$user] = true;
             continue;
         }
