@@ -129,6 +129,9 @@ foreach ($repos as $ghrepo => $repo) {
         $teamName = $teamMaxPermission['team_name'];
         return sprintf('%s (%s)', $teamName, permission_nice($teamMaxPermission['permission']));
     }, $repo['team_names_permissions']));
+    if (empty($combinedTeams)) {
+        $combinedTeams = 'No teams';
+    }
     $teamRepos[$combinedTeams] ??= [];
     $teamRepos[$combinedTeams][] = $ghrepo;
 }
