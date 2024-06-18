@@ -30,7 +30,6 @@ foreach ($ghrepos as $ghrepo) {
     ];
     // Get repo teams
     foreach (github_api("https://api.github.com/repos/$ghrepo/teams") as $teamData) {
-        file_put_contents("team-{$teamData['name']}.json", json_encode($teamData, 448));
         $teamName = $teamData['name'];
         // Update $teams if it hasn't been set
         if (!isset($teams[$teamName])) {
