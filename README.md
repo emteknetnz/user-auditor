@@ -19,4 +19,4 @@ Remember to revoke the token when you are done using it
 
 ## Shred
 
-run `shred.php` to remove any txt + json files created by run. This will use the `shred` command to overwrite the files with random data before deleting them.
+Run `php shred.php` to remove any txt + json files created by run. This will use the `shred` command to overwrite the files with random data before deleting them.
