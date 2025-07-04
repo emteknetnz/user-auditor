@@ -32,7 +32,6 @@ foreach ($data as $_ => $repos) {
         }
     }
 }
-debug_json(json_encode($supportedPackages));
 
 $packageMaintainers = [
     'supported' => [],
