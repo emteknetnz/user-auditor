@@ -2,6 +2,8 @@
 
 Create reports of groups and users on github
 
+Also create a report of users on packagist
+
 ## GitHub users
 
 ### Token

@@ -2,9 +2,6 @@
 
 include 'functions.php';
 
-$i = 0;
-$max = 3;
-
 $supportedPackages = [];
 $json = file_get_contents('https://raw.githubusercontent.com/silverstripe/supported-modules/refs/heads/main/repositories.json');
 $data = json_decode($json, true)['supportedModules'];
@@ -42,10 +39,6 @@ foreach ($organisations as $organisation) {
                 'unsupported' => [],
             ];
             $maintainerPackages[$name][$support][] = $package;
-        }
-        $i++;
-        if ($i >= $max) {
-            break;
         }
     }
 }
