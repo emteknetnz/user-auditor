@@ -8,6 +8,7 @@ $notOrgAdmins = preg_split('#,#', $argv[2] ?? '');
 $admins = [];
 $teams = [];
 $repos = [];
+$ghrepoAdmins = [];
 
 # Fetch data
 
