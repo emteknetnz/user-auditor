@@ -16,20 +16,23 @@ $includeUnsupported = (bool) ($argv[2] ?? false);
 
 $supportedPackages = [];
 $json = file_get_contents('https://raw.githubusercontent.com/silverstripe/supported-modules/refs/heads/main/repositories.json');
-$data = json_decode($json, true)['supportedModules'];
-foreach ($data as $repo) {
+$data = json_decode($json, true);
+foreach ($data as $_ => $repos) {
     $supported = false;
-    foreach (array_keys($repo['majorVersionMapping']) as $version) {
-        if ($version >= $LEAST_SUPPORTED_CMS) {
-            $supported = true;
-            break;
+    foreach ($repos as $repo) {
+        foreach (array_keys($repo['majorVersionMapping']) as $version) {
+            if ($version >= $LEAST_SUPPORTED_CMS) {
+                $supported = true;
+                break;
+            }
+        }
+        if ($supported) {
+            $package = $repo['packagist'];
+            $supportedPackages[] = $package;
         }
     }
-    if ($supported) {
-        $package = $repo['packagist'];
-        $supportedPackages[] = $package;
-    }
 }
+debug_json(json_encode($supportedPackages));
 
 $packageMaintainers = [
     'supported' => [],
