@@ -2,12 +2,23 @@
 
 include 'functions.php';
 
+$LEAST_SUPPORTED_CMS = 5;
+
 $supportedPackages = [];
 $json = file_get_contents('https://raw.githubusercontent.com/silverstripe/supported-modules/refs/heads/main/repositories.json');
 $data = json_decode($json, true)['supportedModules'];
 foreach ($data as $repo) {
-    $package = $repo['packagist'];
-    $supportedPackages[] = $package;
+    $supported = false;
+    foreach (array_keys($repo['majorVersionMapping']) as $version) {
+        if ($version >= $LEAST_SUPPORTED_CMS) {
+            $supported = true;
+            break;
+        }
+    }
+    if ($supported) {
+        $package = $repo['packagist'];
+        $supportedPackages[] = $package;
+    }
 }
 
 $packageMaintainers = [
