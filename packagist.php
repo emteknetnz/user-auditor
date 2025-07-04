@@ -2,7 +2,17 @@
 
 include 'functions.php';
 
-$LEAST_SUPPORTED_CMS = 5;
+// This should be 3 even though if if these packages no longer receieve updates, because the repos could still be used to provide packages to live websites that just happen to be out of date
+$LEAST_SUPPORTED_CMS = 3;
+
+$organisations = $argv[1] ?? '';
+if (!$organisations) {
+    echo "Usage: php packagist.php <organisations>\n";
+    die;
+}
+$organisations = preg_split('#,#', $organisations);
+
+$includeUnsupported = (bool) ($argv[2] ?? false);
 
 $supportedPackages = [];
 $json = file_get_contents('https://raw.githubusercontent.com/silverstripe/supported-modules/refs/heads/main/repositories.json');
@@ -27,18 +37,14 @@ $packageMaintainers = [
 ];
 $maintainerPackages = [];
 
-$organisations = $argv[1] ?? '';
-if (!$organisations) {
-    echo "Usage: php packagist.php <organisations>\n";
-    die;
-}
-$organisations = preg_split('#,#', $organisations);
-
 foreach ($organisations as $organisation) {
     $json = fetch("https://packagist.org/packages/list.json?vendor=$organisation");
     $packages = json_decode($json, true)['packageNames'];
     foreach ($packages as $package) {
         $support = in_array($package, $supportedPackages) ? 'supported' : 'unsupported';
+        if (!$includeUnsupported && $support == 'unsupported') {
+            continue;
+        }
         $packageMaintainers[$support][$package] = [];
         $json = fetch("https://packagist.org/packages/$package.json");
         $data = json_decode($json, true)['package'];

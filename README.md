@@ -23,7 +23,12 @@ Remember to revoke the token when you are done using it
 
 ## Packagist
 
-php packagist.php [organisation]
+`php packagist.php [organisation1],[organisation2],... [includeUnsupported]`
+
+`php packagist.php silverstripe,silverstripe-themes,cwp,symbiote,dnadesign,tractorcow,bringyourownideas,colymba,hafriedlander,lekoala,undefinedoffset,asyncphp`
+
+- `organisation1,...` comma seperated list of the the organisations you want to audit e.g. silverstripe,dnadesign
+- `includeUnsupported` optional param - if any truthy value present then will include unsupported packages in the report
 
 ## Shred
 
