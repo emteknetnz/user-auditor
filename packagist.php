@@ -76,7 +76,7 @@ write_report('report-package-maintainers.txt', $lines);
 
 $lines = [];
 foreach (array_keys($maintainerPackages) as $maintainer) {
-        $lines[] = "# $maintainer";
+    $lines[] = "# $maintainer";
     foreach ($maintainerPackages[$maintainer] as $support => $packages) {
         foreach ($packages as $package) {
             $lines[] = "- $package ($support)";
