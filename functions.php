@@ -82,3 +82,14 @@ function user_permission_is_higher($maxUserPermission, $maxTeamPermission) {
     }
     throw new Exception('Unknown permission');
 }
+
+function fetch($url) {
+    echo "Fetching from $url\n";
+    return file_get_contents($url);
+}
+
+function debug_json($json) {
+    $json = json_decode($json);
+    $str = json_encode($json, 448);
+    file_put_contents('debug.json', $str);
+}

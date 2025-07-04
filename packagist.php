@@ -1,38 +1,75 @@
 <?php 
 
-function fetch($url) {
-    echo "Fetching from $url\n";
-    return file_get_contents($url);
+include 'functions.php';
+
+$i = 0;
+$max = 3;
+
+$supportedPackages = [];
+$json = file_get_contents('https://raw.githubusercontent.com/silverstripe/supported-modules/refs/heads/main/repositories.json');
+$data = json_decode($json, true)['supportedModules'];
+foreach ($data as $repo) {
+    $package = $repo['packagist'];
+    $supportedPackages[] = $package;
 }
 
-function dj($json) {
-    $s = json_encode(json_decode($json), 448);
-    file_put_contents('debug.json', $s);
-}
+$packageMaintainers = [
+    'supported' => [],
+    'unsupported' => [],
+];
+$maintainerPackages = [];
 
-$package_maintainers = [];
-
-$organisation = $argv[1] ?? '';
-if (!$organisation) {
-    echo "Usage: php packagist.php <organisation>\n";
+$organisations = $argv[1] ?? '';
+if (!$organisations) {
+    echo "Usage: php packagist.php <organisations>\n";
     die;
 }
+$organisations = preg_split('#,#', $organisations);
 
-$json = fetch("https://packagist.org/packages/list.json?vendor=$organisation");
-$packages = json_decode($json, true)['packageNames'];
-foreach ($packages as $package) {
-    if ($package != 'silverstripe/admin') {
-        continue;
-    }
-    $package_maintainers[$package] = [];
-    $json = fetch("https://packagist.org/packages/$package.json");
-    $data = json_decode($json, true)['package'];
-    foreach ($data['maintainers'] as $maintainer) {
-        $name = $maintainer['name'];
-        $package_maintainers[$package][] = $name;
+foreach ($organisations as $organisation) {
+    $json = fetch("https://packagist.org/packages/list.json?vendor=$organisation");
+    $packages = json_decode($json, true)['packageNames'];
+    foreach ($packages as $package) {
+        $support = in_array($package, $supportedPackages) ? 'supported' : 'unsupported';
+        $packageMaintainers[$support][$package] = [];
+        $json = fetch("https://packagist.org/packages/$package.json");
+        $data = json_decode($json, true)['package'];
+        foreach ($data['maintainers'] as $maintainer) {
+            $name = $maintainer['name'];
+            $packageMaintainers[$support][$package][] = $name;
+            $maintainerPackages[$name] ??= [
+                'supported' => [],
+                'unsupported' => [],
+            ];
+            $maintainerPackages[$name][$support][] = $package;
+        }
+        $i++;
+        if ($i >= $max) {
+            break;
+        }
     }
 }
 
-foreach ($package_maintainers as $package => $maintainers) {
-    //
+$lines = [];
+foreach (array_keys($packageMaintainers) as $support) {
+    foreach ($packageMaintainers[$support] as $package => $maintainers) {
+        $lines[] = "# $package ($support)";
+        foreach ($maintainers as $maintainer) {
+            $lines[] = "- $maintainer";
+        }
+        $lines[] = '';
+    }
 }
+write_report('report-package-maintainers.txt', $lines);
+
+$lines = [];
+foreach (array_keys($maintainerPackages) as $maintainer) {
+        $lines[] = "# $maintainer";
+    foreach ($maintainerPackages[$maintainer] as $support => $packages) {
+        foreach ($packages as $package) {
+            $lines[] = "- $package ($support)";
+        }
+    }
+    $lines[] = '';
+}
+write_report('report-maintainer-packages.txt', $lines);
