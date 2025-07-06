@@ -2,34 +2,26 @@
 
 include 'functions.php';
 
-// This should be 3 even though if if these packages no longer receieve updates, because the repos could still be used to provide packages to live websites that just happen to be out of date
-$LEAST_SUPPORTED_CMS = 3;
+$allowUnsupported = [
+    'silverstripe/',
+    'silverstripe-themes/',
+    'cwp/',
+];
 
-$organisations = $argv[1] ?? '';
-if (!$organisations) {
-    echo "Usage: php packagist.php <organisations>\n";
-    die;
-}
+$organisations = $argv[1] ?? 'silverstripe,silverstripe-themes,cwp,symbiote,dnadesign,tractorcow,bringyourownideas,colymba,hafriedlander,lekoala,undefinedoffset,asyncphp';
 $organisations = preg_split('#,#', $organisations);
-
-$includeUnsupported = (bool) ($argv[2] ?? false);
 
 $supportedPackages = [];
 $json = file_get_contents('https://raw.githubusercontent.com/silverstripe/supported-modules/refs/heads/main/repositories.json');
 $data = json_decode($json, true);
-foreach ($data as $_ => $repos) {
-    $supported = false;
+foreach ($data as $repos) {
     foreach ($repos as $repo) {
-        foreach (array_keys($repo['majorVersionMapping']) as $version) {
-            if ($version >= $LEAST_SUPPORTED_CMS) {
-                $supported = true;
-                break;
-            }
+        $package = $repo['packagist'] ?? false;
+        // things list eslint are supported though not on packagist
+        if (!$package) {
+            continue;
         }
-        if ($supported) {
-            $package = $repo['packagist'];
-            $supportedPackages[] = $package;
-        }
+        $supportedPackages[] = $package;
     }
 }
 
@@ -43,8 +35,18 @@ foreach ($organisations as $organisation) {
     $json = fetch("https://packagist.org/packages/list.json?vendor=$organisation");
     $packages = json_decode($json, true)['packageNames'];
     foreach ($packages as $package) {
+        $allowed = false;
         $support = in_array($package, $supportedPackages) ? 'supported' : 'unsupported';
-        if (!$includeUnsupported && $support == 'unsupported') {
+        if ($support == 'supported') {
+            $allowed = true;
+        } else {
+            foreach ($allowUnsupported as $str) {
+                if (str_contains($package, $str)) {
+                    $allowed = true;
+                }
+            }
+        }
+        if (!$allowed) {
             continue;
         }
         $packageMaintainers[$support][$package] = [];
